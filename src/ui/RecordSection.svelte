@@ -18,7 +18,7 @@
   <h2 class="title mono">{rec.kind} {rec.name}</h2>
   <Summary model={section.model} lang={session.source.options.lang} />
   <ByteGrid model={section.model} record={section.key} {session} />
-  <FieldTable model={section.model} record={section.key} {session} />
+  <FieldTable model={section.model} record={section.key} source={session.source.text} {session} />
 </section>
 
 <style>

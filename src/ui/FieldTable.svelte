@@ -11,6 +11,7 @@
   // different record starts fresh.
   import type { RenderModel, TreeNode } from '$core/types';
   import { flattenVisible, groupColorClass } from '$core/render';
+  import { recordInitializers, type RecordInitializer } from '$core/initializers';
   import { fmtOffset, type SourceSession } from '$state/session.svelte';
   import { fmtSize, fmtGroupSize, memberTooltipHtml, groupTooltipHtml } from './format';
   import { tooltip } from './tooltip';
@@ -29,8 +30,12 @@
       guide line runs down the middle of it. Mirrored by `--indent` in the CSS. */
   const INDENT = 16;
 
-  const { model, record, session }: { model: RenderModel; record: string; session: SourceSession } =
-    $props();
+  const {
+    model,
+    record,
+    source,
+    session,
+  }: { model: RenderModel; record: string; source: string; session: SourceSession } = $props();
 
   /** Shared so `open` has something stable to be when nothing is opened. */
   const EMPTY: ReadonlySet<string> = new Set<string>();
@@ -56,6 +61,17 @@
   });
   const collapsed = $derived(new Set(collapsibleIds(model.tree).filter((id) => !open.has(id))));
   const rows = $derived(flattenVisible(model.tree, collapsed));
+  const initializers = $derived.by((): RecordInitializer[] => {
+    const fields = model.leaves.filter((leaf) => leaf.direct).map((leaf) => leaf.name);
+    return recordInitializers(source, model.record.kind, model.record.name, fields);
+  });
+
+  function valuesFor(field: string): string[] {
+    return initializers.flatMap((initializer) => {
+      const value = initializer.fields.get(field);
+      return value === undefined ? [] : [`${initializer.variable}.${field} = ${value}`];
+    });
+  }
 
   /** Every node that can be collapsed, at any depth. */
   function collapsibleIds(nodes: TreeNode[]): string[] {
@@ -129,10 +145,12 @@
   <table class="field-table">
     <thead
       ><tr
-        ><th></th><th>Field</th><th>Type</th><th><span use:tooltip={HEAD.offset}>Offset</span></th
-        ><th><span use:tooltip={HEAD.size}>Size</span></th><th
-          ><span use:tooltip={HEAD.align}>Align</span></th
-        ><th><span use:tooltip={HEAD.pad}>Padding after</span></th></tr
+        ><th></th><th>Field</th><th>Type</th>{#if initializers.length}<th>Initialized value</th
+          >{/if}<th><span use:tooltip={HEAD.offset}>Offset</span></th><th
+          ><span use:tooltip={HEAD.size}>Size</span></th
+        ><th><span use:tooltip={HEAD.align}>Align</span></th><th
+          ><span use:tooltip={HEAD.pad}>Padding after</span></th
+        ></tr
       ></thead
     >
     <tbody onmouseleave={leave}>
@@ -158,6 +176,9 @@
               </div>
             </td>
             <td class="type">{leaf.kind === 'special' ? '-' : leaf.type}</td>
+            {#if initializers.length}
+              <td class="value">{valuesFor(leaf.name).join(' · ')}</td>
+            {/if}
             <td class="num">{fmtOffset(leaf.offsetBits)}</td>
             <td
               class="num"
@@ -235,6 +256,7 @@
               </div>
             </td>
             <td class="type">{group.type}</td>
+            {#if initializers.length}<td class="value"></td>{/if}
             <td class="num">{fmtOffset(node.offsetBits)}</td>
             <td class="num" class:noted={short} use:tooltip={shortWhy}
               >{fmtGroupSize(node.sizeBits)}{short ? ' *' : ''}</td
@@ -259,9 +281,9 @@
                 >
               </div>
             </td>
-            <td class="type"></td><td class="num">{fmtOffset(m.offsetBits)}</td><td class="num"
-              >0 b</td
-            ><td class="num"></td><td class="num"></td>
+            <td class="type"></td>{#if initializers.length}<td class="value"></td>{/if}<td
+              class="num">{fmtOffset(m.offsetBits)}</td
+            ><td class="num">0 b</td><td class="num"></td><td class="num"></td>
           </tr>
         {/if}
       {/each}
@@ -410,6 +432,12 @@
     color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 12px;
+  }
+  .value {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
   }
   .num {
     text-align: right;
